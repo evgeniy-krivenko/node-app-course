@@ -3,6 +3,6 @@ import { User } from './user.entity';
 
 export class UserMapper {
 	static mapToDomainEmtity(userModel: UserModel): User {
-		return new User(userModel.email, userModel.name, userModel.id);
+		return new User(userModel.email, userModel.name, userModel.id, userModel.password);
 	}
 }

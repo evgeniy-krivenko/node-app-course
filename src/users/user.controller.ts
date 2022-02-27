@@ -8,14 +8,16 @@ import { TYPES } from '../types';
 import { IUserController } from './user.controller.interface';
 import { UserRegisterDto } from './dto/user-register.dto';
 import { UserLoginDto } from './dto/user-login.dto';
-import { User } from './user.entity';
 import { IUserService } from './user.service.interface';
 import { ValidateMiddleware } from '../common/validate.middleware';
+import { sign } from 'jsonwebtoken';
+import { IConfigService } from '../config/config.service.interface';
 
 export class UserController extends BaseController implements IUserController {
 	constructor(
 		@inject(TYPES.ILoggerService) protected readonly logger: ILogger,
 		@inject(TYPES.IUserService) protected readonly userService: IUserService,
+		@inject(TYPES.IConfigService) protected readonly configService: IConfigService,
 	) {
 		super(logger);
 		this.bindRouters([
@@ -25,7 +27,12 @@ export class UserController extends BaseController implements IUserController {
 				func: this.register,
 				middlewares: [new ValidateMiddleware(UserRegisterDto)],
 			},
-			{ method: 'post', path: '/login', func: this.login },
+			{
+				method: 'post',
+				path: '/login',
+				func: this.login,
+				middlewares: [new ValidateMiddleware(UserLoginDto)],
+			},
 		]);
 	}
 
@@ -47,9 +54,46 @@ export class UserController extends BaseController implements IUserController {
 		});
 	}
 
-	login(req: Request<{}, {}, UserLoginDto>, res: Response, next: NextFunction): void {
-		// this.ok(res, 'Вход выполнен');
-		console.log(req.body);
-		next(new HttpError(401, 'Не удалось авторизироваться'));
+	async login(
+		req: Request<{}, {}, UserLoginDto>,
+		res: Response,
+		next: NextFunction,
+	): Promise<void> {
+		const { body } = req;
+		const secret = this.configService.get('JWT_SECRET');
+		if (!secret) {
+			next(new HttpError(500, 'Отсутствует секретный ключ'));
+			return;
+		}
+		const isValid = await this.userService.validateUser(body);
+		if (!isValid) {
+			next(new HttpError(401, 'Не удалось авторизироваться'));
+			return;
+		}
+		const jwt = await this.signJWT(body.email, String(secret));
+		this.ok(res, {
+			jwt,
+		});
+	}
+
+	private async signJWT(email: string, secret: string): Promise<string> {
+		return new Promise((resolve, reject) => {
+			sign(
+				{
+					email,
+					iat: Math.floor(Date.now() / 1000),
+				},
+				secret,
+				{
+					algorithm: 'HS256',
+				},
+				(err, token) => {
+					if (err) {
+						reject(err);
+					}
+					resolve(token as string);
+				},
+			);
+		});
 	}
 }

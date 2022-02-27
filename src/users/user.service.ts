@@ -28,6 +28,10 @@ export class UserService implements IUserService {
 	}
 
 	async validateUser(dto: UserLoginDto): Promise<boolean> {
-		return false;
+		const foundUser = await this.userRepository.find(dto.email);
+		if (!foundUser) {
+			return false;
+		}
+		return foundUser.isValidPassword(dto.password);
 	}
 }
